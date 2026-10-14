@@ -48,3 +48,13 @@ application-test.properties
 /untitled/
 chat-files.txt
 frontend-review.txt
+*.zip
+*.patch
+temp_script_*.js
+*.pyc
+__pycache__/
+.venv_pdf/
+*.bak
+div_trace.txt
+out.txt
+error.log
