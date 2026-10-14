@@ -6,6 +6,11 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class ViewController {
 
+    @GetMapping("/")
+    public String landingPage() {
+        return "landing";
+    }
+
     @GetMapping("/login")
     public String loginPage() {
         return "login"; // tro tới login.html
@@ -26,8 +31,23 @@ public class ViewController {
         return "profile";
     }
 
-    @GetMapping("/dashboard")
+    @GetMapping("/user/dashboard")
     public String dashboardPage() {
-        return "dashboard"; // trỏ tới templates/dashboard.html
+        return "user/dashboard"; // ✅ trỏ tới templates/user/dashboard.html
+    }
+
+    @GetMapping("/manager/dashboard")
+    public String managerDashboardPage() {
+        return "manager/dashboard"; 
+        // ✅ trỏ tới templates/manager/dashboard.html
+    }
+    @GetMapping("/user/chat")
+    public String chatPage() {
+        return "redirect:/user/dashboard?tab=chat";
+    }
+
+    @GetMapping("/admin/dashboard")
+    public String adminDashboardPage() {
+        return "admin/dashboard"; // ✅ trỏ tới templates/admin/dashboard.html
     }
 }

@@ -8,12 +8,21 @@ import com.javaweb.dto.chat.ChatSessionRequest;
 import com.javaweb.dto.chat.ChatSessionResponse;
 import com.javaweb.entity.ChatSessionsEntity;
 import com.javaweb.entity.UsersEntity;
+import com.javaweb.exception.BadRequestException;
 import com.javaweb.repository.ChatSessionsRepository;
 import com.javaweb.service.ChatSessionService;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
+import com.javaweb.dto.chat.AdminChatSessionResponse;
+import java.time.LocalDateTime;
+
+import com.javaweb.dto.chat.ChatSessionResponse;
+import com.javaweb.entity.ChatSessionsEntity;
 /**
  * ChatSessionServiceImpl — Triển khai ChatSessionService, chứa toàn bộ
  * business logic liên quan đến quản lý chat session.
@@ -96,6 +105,107 @@ public class ChatSessionServiceImpl implements ChatSessionService {
                 ))
                 .collect(Collectors.toList());
     }
+
+    /**
+     * Xem JavaDoc ở ChatSessionService.deleteSession().
+     *
+     * Tại sao dùng chung message lỗi cho "không tồn tại" và "không thuộc
+     * currentUser": tránh lộ thông tin cho kẻ tấn công dò sessionId - nếu
+     * trả 2 message khác nhau ("không tồn tại" vs "không có quyền"), họ
+     * có thể suy ra được sessionId nào tồn tại nhưng thuộc người khác,
+     * dù không đọc được nội dung. Đây là nguyên tắc bảo mật đã áp dụng
+     * nhất quán từ saveUserMessage() và getMessageHistory().
+     */
+    @Override
+    public void deleteSession(Long sessionId, UsersEntity currentUser) {
+
+        ChatSessionsEntity session = chatSessionsRepository.findById(sessionId)
+                .orElseThrow(() -> new BadRequestException(
+                        "Chat session không tồn tại hoặc bạn không có quyền truy cập"));
+
+        if (!session.getUserChatId().getId().equals(currentUser.getId())) {
+            throw new BadRequestException(
+                    "Chat session không tồn tại hoặc bạn không có quyền truy cập");
+        }
+
+        // Chặn xóa lặp lại - nếu đã xóa mềm từ trước, báo lỗi rõ ràng thay
+        // vì âm thầm ghi đè deleted_at bằng thời điểm mới, để client biết
+        // chính xác đây không phải lần xóa đầu tiên
+        if (session.getDeletedAt() != null) {
+            throw new BadRequestException("Chat session này đã bị xóa trước đó");
+        }
+
+        session.setDeletedAt(LocalDateTime.now());
+        chatSessionsRepository.save(session);
+    }
+
+    @Override
+    public ChatSessionResponse renameSession(Long sessionId, ChatSessionRequest request, UsersEntity currentUser) {
+
+        ChatSessionsEntity session = chatSessionsRepository.findById(sessionId)
+                .orElseThrow(() -> new BadRequestException(
+                        "Chat session không tồn tại hoặc bạn không có quyền truy cập"));
+
+        if (!session.getUserChatId().getId().equals(currentUser.getId())) {
+            throw new BadRequestException(
+                    "Chat session không tồn tại hoặc bạn không có quyền truy cập");
+        }
+
+        if (session.getDeletedAt() != null) {
+            throw new BadRequestException("Chat session này đã bị xóa trước đó");
+        }
+String newTitle = request.getTitle();
+String title = (newTitle == null || newTitle.trim().isEmpty())
+        ? "Cuộc trò chuyện mới"
+        : newTitle.trim();
+
+session.setTitle(title);
+session.setUpdatedAt(LocalDateTime.now());
+
+ChatSessionsEntity saved = chatSessionsRepository.save(session);
+return mapToResponse(saved);
+}
+
+private ChatSessionResponse mapToResponse(ChatSessionsEntity entity) {
+    return new ChatSessionResponse(
+            entity.getId(),
+            entity.getTitle(),
+            entity.getCreatedAt(),
+            entity.getUpdatedAt()
+    );
+}
+
+@Override
+public Page<AdminChatSessionResponse> getAllSessionsForAdmin(Pageable pageable) {
+    return chatSessionsRepository.findAll(pageable).map(session -> {
+
+        AdminChatSessionResponse response = new AdminChatSessionResponse();
+
+        response.setId(session.getId());
+        response.setTitle(session.getTitle());
+        response.setCreatedAt(session.getCreatedAt());
+        response.setUpdatedAt(session.getUpdatedAt());
+
+        if (session.getUserChatId() != null) {
+            response.setUserName(
+                    session.getUserChatId().getFullName() != null
+                            ? session.getUserChatId().getFullName()
+                            : session.getUserChatId().getUserName()
+            );
+        }
+
+        if (session.getChatMessageEntities() != null) {
+            response.setMessageCount(
+                    (long) session.getChatMessageEntities().size()
+            );
+        } else {
+            response.setMessageCount(0L);
+        }
+
+        return response;
+    });
+}
+
 }
 
 /*

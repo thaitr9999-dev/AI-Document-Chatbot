@@ -1,18 +1,63 @@
 package com.javaweb.repository;
 
-
+import com.javaweb.entity.DepartmentsEntity;
+import com.javaweb.entity.UsersEntity;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
-import org.springframework.data.jpa.repository.JpaRepository;
-import com.javaweb.entity.UsersEntity;
+import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import com.javaweb.enums.UserRole;
 
 public interface UsersRepository extends JpaRepository<UsersEntity, Long> {
 
 	Optional<UsersEntity> findByEmail(String email);
 
 	boolean existsByUserName(String userName);
-	
+
 	boolean existsByEmail(String email);
 
+	// Tìm Manager của một phòng ban
+	@Query("SELECT u FROM UsersEntity u WHERE u.department.id = :deptId AND u.role = 'MANAGER' AND u.deletedAt IS NULL AND u.isActive = true")
+	List<UsersEntity> findActiveManagersByDepartment(@Param("deptId") Long deptId);
+
+	// Đếm user bị khóa và chưa xóa mềm
+	long countByIsActiveFalseAndDeletedAtIsNull();
+
+	// Đếm user theo object phòng ban
+	long countByDepartment(DepartmentsEntity department);
+
+	// Đếm user theo id phòng ban
+	long countByDepartmentId(Long departmentId);
+
+	// Đếm user đang hoạt động theo id phòng ban
+	long countByDepartmentIdAndDeletedAtIsNullAndIsActiveTrue(Long departmentId);
+	
+	// Đếm user đang hoạt động theo id phòng ban và vai trò
+	long countByDepartmentIdAndDeletedAtIsNullAndIsActiveTrueAndRole(Long departmentId, UserRole role);
+
+	// Tìm xem còn users hoạt động thuộc phòng ban không
+	boolean existsByDepartmentIdAndDeletedAtIsNullAndIsActiveTrue(Long id);
+
+	@Query("SELECT u FROM UsersEntity u WHERE u.deletedAt IS NULL AND " +
+			"(:#{#role == null} = true OR u.role = :role) AND " +
+			"(:#{#departmentId == null} = true OR u.department.id = :departmentId) AND " +
+			"(:#{#isActive == null} = true OR u.isActive = :isActive) AND " +
+			"(:#{#search == null} = true OR LOWER(u.fullName) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(u.userName) LIKE LOWER(CONCAT('%', :search, '%')))")
+	Page<UsersEntity> searchUsers(
+			@Param("search") String search,
+			@Param("role") UserRole role,
+			@Param("departmentId") Long departmentId,
+			@Param("isActive") Boolean isActive,
+			Pageable pageable);
+
+	Optional<UsersEntity> findByUserName(String userName);
+
+	List<UsersEntity> findByRole(UserRole role);
+
+	List<UsersEntity> findByDepartmentId(Long departmentId);
 }

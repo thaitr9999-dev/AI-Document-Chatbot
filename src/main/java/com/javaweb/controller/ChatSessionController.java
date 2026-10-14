@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.javaweb.dto.chat.ChatSessionRequest;
 import com.javaweb.dto.chat.ChatSessionResponse;
 import com.javaweb.entity.UsersEntity;
+import com.javaweb.security.CustomUserDetails;
 import com.javaweb.service.ChatMessageService;
 import com.javaweb.service.ChatSessionService;
 
@@ -21,8 +22,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 
 import com.javaweb.dto.chat.ChatMessageHistoryResponse;
-import com.javaweb.service.ChatMessageService;
-
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 /**
  * ChatSessionController — REST Controller xử lý các request liên quan đến
  * vòng đời chat session (tạo, liệt kê, xoá mềm).
@@ -40,7 +41,7 @@ import com.javaweb.service.ChatMessageService;
  * sau khi JwtAuthenticationFilter xác thực token thành công.
  */
 @RestController
-@RequestMapping("/api/chat")
+@RequestMapping({"/api/chat", "/api/user"})
 public class ChatSessionController {
 
     private final ChatSessionService chatSessionService;
@@ -62,7 +63,7 @@ public class ChatSessionController {
      *         được JwtAuthenticationFilter query sẵn từ DB) — ép kiểu
      *         thẳng, KHÔNG query lại DB ở Service nữa (tránh N+1 vô ích).
      */
-    @PostMapping("/sessions")
+    @PostMapping({"/sessions", "/chat-sessions"})
     public ResponseEntity<ChatSessionResponse> createSession(
             @RequestBody(required = false) ChatSessionRequest request) {
 
@@ -74,7 +75,7 @@ public class ChatSessionController {
         // Ép kiểu principal về UsersEntity — đây là điểm mấu chốt khác với
         // bản trước: KHÔNG dùng authentication.getName(), vì principal ở
         // đây không phải String/UserDetails nên getName() trả sai giá trị
-        UsersEntity currentUser = (UsersEntity) authentication.getPrincipal();
+        UsersEntity currentUser = getCurrentUser(authentication);
 
         if (request == null) {
             request = new ChatSessionRequest();
@@ -93,11 +94,11 @@ public class ChatSessionController {
      * Lưu ý: cùng cách lấy currentUser như createSession() — ép kiểu thẳng
      *        principal về UsersEntity, không dùng getName().
      */
-    @GetMapping("/sessions")
+    @GetMapping({"/sessions", "/chat-sessions"})
     public ResponseEntity<List<ChatSessionResponse>> getSessions() {
 
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        UsersEntity currentUser = (UsersEntity) authentication.getPrincipal();
+        UsersEntity currentUser = getCurrentUser(authentication);
 
         List<ChatSessionResponse> response = chatSessionService.getSessions(currentUser);
 
@@ -114,15 +115,68 @@ public class ChatSessionController {
      *        thuộc currentUser hay không nằm ở tầng Service, Controller
      *        không tự kiểm tra lại.
      */
-    @GetMapping("/sessions/{id}/messages")
+    @GetMapping({"/sessions/{id}/messages", "/chat-sessions/{id}/messages"})
     public ResponseEntity<List<ChatMessageHistoryResponse>> getMessages(@PathVariable Long id) {
 
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        UsersEntity currentUser = (UsersEntity) authentication.getPrincipal();
+        UsersEntity currentUser = getCurrentUser(authentication);
 
         List<ChatMessageHistoryResponse> response = chatMessageService.getMessageHistory(id, currentUser);
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Xóa mềm 1 chat session của user đang đăng nhập.
+     *
+     * Được gọi từ: DELETE /api/chat/sessions/{id}
+     * Input: id session lấy từ path variable — không có body.
+     * Output: 204 No Content nếu xóa thành công.
+     * Lưu ý: mọi validate (tồn tại, đúng chủ, chưa xóa trước đó) nằm ở
+     *        tầng Service — Controller chỉ chuyển tiếp và trả status.
+     */
+    @DeleteMapping({"/sessions/{id}", "/chat-sessions/{id}"})
+    public ResponseEntity<Void> deleteSession(@PathVariable Long id) {
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        UsersEntity currentUser = getCurrentUser(authentication);
+
+        chatSessionService.deleteSession(id, currentUser);
+
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Đổi tên 1 chat session.
+     */
+    @org.springframework.web.bind.annotation.PutMapping({"/sessions/{id}", "/chat-sessions/{id}"})
+    public ResponseEntity<ChatSessionResponse> renameSession(
+            @PathVariable Long id,
+            @RequestBody ChatSessionRequest request) {
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        UsersEntity currentUser = getCurrentUser(authentication);
+
+        ChatSessionResponse response = chatSessionService.renameSession(id, request, currentUser);
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Helper: lấy UsersEntity từ Authentication.
+     *
+     * JwtAuthenticationFilter set principal = CustomUserDetails (wrap UsersEntity),
+     * KHÔNG phải UsersEntity trực tiếp. Nếu cast thẳng sẽ thấy ClassCastException.
+     */
+    private UsersEntity getCurrentUser(Authentication authentication) {
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof CustomUserDetails) {
+            return ((CustomUserDetails) principal).getUser();
+        }
+        if (principal instanceof UsersEntity) {
+            return (UsersEntity) principal;
+        }
+        throw new IllegalStateException("Không xác định được user từ SecurityContext: " + principal.getClass());
     }
 }
 

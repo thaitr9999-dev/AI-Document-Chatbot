@@ -21,6 +21,9 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 @Entity
 @Getter
 @Setter
@@ -33,7 +36,8 @@ public class ChatMessageEntity {
 	private Long id;
 	
 	@Enumerated(EnumType.STRING)
-	@Column(name = "role")
+	@JdbcTypeCode(SqlTypes.NAMED_ENUM)
+	@Column(name = "role", columnDefinition = "chatmessagerole")
 	private ChatMessageRole role;
 	
 	@Column(name = "content", columnDefinition = "TEXT")

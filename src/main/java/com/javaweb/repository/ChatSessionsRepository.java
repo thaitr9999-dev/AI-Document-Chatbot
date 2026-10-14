@@ -21,4 +21,7 @@ public interface ChatSessionsRepository extends JpaRepository<ChatSessionsEntity
      *        tên là "userChatId" (kiểu UsersEntity), không phải "userId".
      */
     List<ChatSessionsEntity> findByUserChatId_IdAndDeletedAtIsNullOrderByUpdatedAtDesc(Long userId);
+    int countByUserChatId_IdAndDeletedAtIsNull(Long userId);
+    int countByDeletedAtIsNull();
+    List<ChatSessionsEntity> findByDeletedAtIsNull();
 }

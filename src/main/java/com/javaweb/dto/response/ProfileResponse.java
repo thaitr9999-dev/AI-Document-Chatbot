@@ -20,4 +20,31 @@ public class ProfileResponse {
 		private String role;
 		
 		private String phone;
+		
+		private String avatarUrl;
+
+		private String signatureUrl;
+
+		private String jobTitle;
+
+		private String departmentName;
+
+		private LocalDateTime createdAt;
+		
+		private LocalDateTime lastLogin;
+		
+		private Long documentCount;
+		
+		private Integer chatSessionCount;
+		
+		private Integer activityCount;
+		
+		// Manager fields
+		private boolean isManager;
+		private int managedEmployeeCount;
+		private int pendingDocumentCount;
+		private int pendingRequestCount;
+		private int activeSessionsCount;
+		private int departmentDocumentsCount;
+		private int departmentOnlineUsersCount;
 }
