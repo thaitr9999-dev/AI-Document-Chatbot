@@ -38,32 +38,36 @@ public class PromptBuilder {
      * GeminiChatService.generateAnswer(prompt).
      *
      * Input:
-     *   @param question câu hỏi gốc của user
-     *   @param results   danh sách top-K SearchResult đã lọc theo quyền
-     *                    phòng ban và đã vượt ngưỡng similarity (việc lọc
-     *                    ngưỡng KHÔNG làm ở đây — RetrievalService lo,
-     *                    PromptBuilder chỉ nhận list đã sẵn sàng để dùng)
-     * Output:
-     *   String — prompt hoàn chỉnh, sẵn sàng gửi cho Gemini Chat API
+     * 
+     * @param question câu hỏi gốc của user
+     * @param results  danh sách top-K SearchResult đã lọc theo quyền
+     *                 phòng ban và đã vượt ngưỡng similarity (việc lọc
+     *                 ngưỡng KHÔNG làm ở đây — RetrievalService lo,
+     *                 PromptBuilder chỉ nhận list đã sẵn sàng để dùng)
+     *                 Output:
+     *                 String — prompt hoàn chỉnh, sẵn sàng gửi cho Gemini Chat API
      *
-     * Lưu ý: mỗi chunk được nối cách nhau bằng "\n---\n" để LLM phân biệt
-     * rõ ranh giới giữa các đoạn tài liệu khác nhau, tránh nhầm 2 đoạn
-     * không liên quan thành 1 đoạn văn liền mạch.
+     *                 Lưu ý: mỗi chunk được nối cách nhau bằng "\n---\n" để LLM
+     *                 phân biệt
+     *                 rõ ranh giới giữa các đoạn tài liệu khác nhau, tránh nhầm 2
+     *                 đoạn
+     *                 không liên quan thành 1 đoạn văn liền mạch.
      */
-    public String build(String question, List<SearchResult> results, java.util.List<com.javaweb.dto.chat.ChatHistoryItem> history) {
+    public String build(String question, List<SearchResult> results,
+            java.util.List<com.javaweb.dto.chat.ChatHistoryItem> history) {
         StringBuilder contextBuilder = new StringBuilder();
         for (int i = 0; i < results.size(); i++) {
             SearchResult r = results.get(i);
             contextBuilder.append("[Nguồn ")
-                          .append(i)
-                          .append("] Tài liệu: ")
-                          .append(r.fileName());
+                    .append(i)
+                    .append("] Tài liệu: ")
+                    .append(r.fileName());
             if (r.chunk().getPageNumber() != null) {
                 contextBuilder.append(", Trang: ").append(r.chunk().getPageNumber());
             }
             contextBuilder.append("\n")
-                          .append(chunkFormatter.format(r))
-                          .append("\n---\n");
+                    .append(chunkFormatter.format(r))
+                    .append("\n---\n");
         }
 
         // Ghép lịch sử hội thoại (nếu có) để AI nhớ ngữ cảnh câu trước
@@ -80,12 +84,16 @@ public class PromptBuilder {
         return "Bạn là một trợ lý AI tận tâm. Hãy trả lời câu hỏi dựa trên các ngữ cảnh được cung cấp bên dưới.\n" +
                 "YÊU CẦU QUAN TRỌNG:\n" +
                 "1. FORMAT: Trình bày câu trả lời đẹp mắt bằng Markdown (in đậm, danh sách).\n" +
-                "2. SOFT REFUSAL: Nếu câu hỏi chỉ liên quan một phần, KHÔNG từ chối cứng nhắc. Hãy nêu rõ phần nào tài liệu không có, đồng thời chủ động cung cấp các thông tin liên quan CÓ THẬT trong ngữ cảnh để hỗ trợ người dùng.\n" +
-                "3. DENSE CITATION: BẮT BUỘC gắn thẻ trích dẫn nằm trong DẤU NGOẶC VUÔNG, ví dụ [0], [1] ngay sau MỖI CÂU hoặc MỖI SỐ LIỆU cụ thể. Tuyệt đối KHÔNG viết số trơn (như 0, 1) mà không có ngoặc vuông.\n" +
-                "4. MAPPING CHÍNH XÁC: Phải sử dụng đúng số ID của [Nguồn X] đã cho (từ 0 đến " + (results.size() - 1) + "), tuyệt đối không tự bịa số trích dẫn.\n" +
+                "2. REFUSAL RULE: NẾU câu hỏi hỏi về một cá nhân, nhân vật, hoặc thực thể cụ thể (tên người, tên công ty bên ngoài...) mà KHÔNG xuất hiện trong tài liệu được cung cấp, hãy từ chối ngắn gọn: 'Tài liệu nội bộ không có thông tin về [tên]. Vui lòng hỏi về các chính sách, quy định hoặc quy trình của công ty.' KHÔNG cung cấp thêm thông tin nào khác từ tài liệu khi đó. CHỈ áp dụng Soft Refusal (trả lời một phần) khi câu hỏi liên quan trực tiếp đến nội dung tài liệu nhưng thông tin chưa đầy đủ.\n"
+                +
+                "3. DENSE CITATION: BẮT BUỘC gắn thẻ trích dẫn nằm trong DẤU NGOẶC VUÔNG, ví dụ [0], [1] ngay sau MỖI CÂU hoặc MỖI SỐ LIỆU cụ thể. Tuyệt đối KHÔNG viết số trơn (như 0, 1) mà không có ngoặc vuông.\n"
+                +
+                "4. MAPPING CHÍNH XÁC: Phải sử dụng đúng số ID của [Nguồn X] đã cho (từ 0 đến " + (results.size() - 1)
+                + "), tuyệt đối không tự bịa số trích dẫn.\n" +
                 "5. KHÔNG tạo mục \"Nguồn tham khảo\" ở cuối câu trả lời.\n" +
-                "6. GIỚI HẠN: Trả lời đúng trọng tâm, súc tích trong khoảng 5-10 câu.\n" +
-                "7. NGỮ CẢNH HỘI THOẠI: Hãy đọc lịch sử chat để biết chủ đề hiện tại là gì. NẾU tài liệu cung cấp bên dưới có chứa những thông tin LẠC ĐỀ so với lịch sử chat, HÃY BỎ QUA CHÚNG. Đồng thời, hãy khéo léo thể hiện trong câu mở đầu rằng bạn vẫn nhớ chủ đề đang nói (Ví dụ: 'Tiếp tục với chủ đề...').\n\n" +
+                "6. GIỚI HẠN: Trả lời đúng trọng tâm, súc tích trong khoảng 10-15 câu.\n" +
+                "7. NGỮ CẢNH HỘI THOẠI: Hãy đọc lịch sử chat để biết chủ đề hiện tại là gì. NẾU tài liệu cung cấp bên dưới có chứa những thông tin LẠC ĐỀ so với lịch sử chat, HÃY BỎ QUA CHÚNG. Đồng thời, hãy khéo léo thể hiện trong câu mở đầu rằng bạn vẫn nhớ chủ đề đang nói (Ví dụ: 'Tiếp tục với chủ đề...').\n\n"
+                +
                 historyBuilder.toString() +
                 "Ngữ cảnh tài liệu:\n" + contextBuilder.toString() +
                 "\n\nCâu hỏi: " + question;
@@ -95,16 +103,16 @@ public class PromptBuilder {
 /*
  * ASCII Flow:
  *
- *   RetrievalService.ask(question, departmentId)
- *           │  (đã có List<SearchResult> từ Repository, đã qua lọc ngưỡng)
- *           ▼
- *   PromptBuilder.build(question, results)
- *           │
- *           ├──► ChunkFormatter.format(result)  (gọi lặp lại cho từng chunk)
- *           │
- *           ▼
- *   String prompt hoàn chỉnh
- *           │
- *           ▼
- *   GeminiChatService.generateAnswer(prompt)
+ * RetrievalService.ask(question, departmentId)
+ * │ (đã có List<SearchResult> từ Repository, đã qua lọc ngưỡng)
+ * ▼
+ * PromptBuilder.build(question, results)
+ * │
+ * ├──► ChunkFormatter.format(result) (gọi lặp lại cho từng chunk)
+ * │
+ * ▼
+ * String prompt hoàn chỉnh
+ * │
+ * ▼
+ * GeminiChatService.generateAnswer(prompt)
  */

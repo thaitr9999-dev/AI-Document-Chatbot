@@ -63,7 +63,8 @@ public class DocumentProcessingService {
 
     private static final Logger log = LoggerFactory.getLogger(DocumentProcessingService.class);
 
-    // Giới hạn 1.5 request/giây (tức 90 request/phút) cho TOÀN BỘ luồng chạy song song
+    // Giới hạn 1.5 request/giây (tức 90 request/phút) cho TOÀN BỘ luồng chạy song
+    // song
     private static final RateLimiter rateLimiter = RateLimiter.create(1.5);
 
     private final DocumentRepository documentRepository;
@@ -149,8 +150,9 @@ public class DocumentProcessingService {
         try {
             InputStream inputStream = storageService.downloadFile(document.getFilePath());
             byte[] fileData = inputStream.readAllBytes();
-            
-            // Lọc bỏ ký tự null-byte \u0000 sinh ra từ quá trình parse PDF để tránh lỗi Postgres
+
+            // Lọc bỏ ký tự null-byte \u0000 sinh ra từ quá trình parse PDF để tránh lỗi
+            // Postgres
             String content = documentParser.parse(fileData).replace("\u0000", "");
 
             // Xử lý AI OCR (Tóm tắt, Mục đích, Tags)
@@ -183,18 +185,22 @@ public class DocumentProcessingService {
 
             String jsonResponse = geminiChatService.generateAnswer(prompt);
 
-            // Xử lý làm sạch chuỗi JSON một cách an toàn nhất (loại bỏ markdown và chữ thừa)
+            // Xử lý làm sạch chuỗi JSON một cách an toàn nhất (loại bỏ markdown và chữ
+            // thừa)
             String cleanJson = jsonResponse.replace("```json", "").replace("```", "").trim();
-            
+
             int startIndex = cleanJson.indexOf('{');
             int endIndex = cleanJson.lastIndexOf('}');
-            
+
             if (startIndex != -1 && endIndex != -1 && startIndex <= endIndex) {
                 cleanJson = cleanJson.substring(startIndex, endIndex + 1);
                 JsonNode rootNode = objectMapper.readTree(cleanJson);
-                if (rootNode.has("purpose")) document.setAiPurpose(rootNode.get("purpose").asText());
-                if (rootNode.has("summary")) document.setAiSummary(rootNode.get("summary").asText());
-                if (rootNode.has("tags")) document.setAiTags(rootNode.get("tags").asText());
+                if (rootNode.has("purpose"))
+                    document.setAiPurpose(rootNode.get("purpose").asText());
+                if (rootNode.has("summary"))
+                    document.setAiSummary(rootNode.get("summary").asText());
+                if (rootNode.has("tags"))
+                    document.setAiTags(rootNode.get("tags").asText());
             } else {
                 log.warn("Gemini không trả về JSON hợp lệ. Raw response: {}", jsonResponse);
             }
@@ -222,16 +228,19 @@ public class DocumentProcessingService {
             String text = chunkTexts.get(i);
             float[] embedding = null;
             int retries = 0;
-            
+
             while (retries < 3) {
                 try {
                     embedding = embeddingService.embedDocument(text);
-                    // Dùng RateLimiter thay vì Thread.sleep cố định để điều phối mượt mà giữa các thread
+                    // Dùng RateLimiter thay vì Thread.sleep cố định để điều phối mượt mà giữa các
+                    // thread
                     rateLimiter.acquire();
                     break;
                 } catch (org.springframework.web.client.HttpClientErrorException.TooManyRequests e) {
                     retries++;
-                    log.warn("Bị giới hạn API Gemini (429 Too Many Requests), chờ 21 giây trước khi thử lại... (Chunk {}, Lần {})", i, retries);
+                    log.warn(
+                            "Bị giới hạn API Gemini (429 Too Many Requests), chờ 21 giây trước khi thử lại... (Chunk {}, Lần {})",
+                            i, retries);
                     try {
                         Thread.sleep(21000);
                     } catch (InterruptedException ie) {
@@ -239,14 +248,20 @@ public class DocumentProcessingService {
                     }
                 }
             }
-            
+
             if (embedding == null) {
-                throw new RuntimeException("Lỗi vượt quá API Rate Limit của Gemini sau 3 lần thử lại. Chunk index: " + i);
+                throw new RuntimeException(
+                        "Lỗi vượt quá API Rate Limit của Gemini sau 3 lần thử lại. Chunk index: " + i);
             }
 
             DocumentChunkEntity chunk = new DocumentChunkEntity();
             chunk.setDocumentId(documentId);
             chunk.setChunkIndex(i);
+            
+            // Ước lượng số trang: 300 ký tự mỗi chunk step, 2000 ký tự 1 trang
+            int estimatedPage = (i * 300) / 2000 + 1;
+            chunk.setPageNumber(estimatedPage);
+            
             chunk.setContent(text);
             chunk.setEmbedding(embedding);
             result.add(chunk);

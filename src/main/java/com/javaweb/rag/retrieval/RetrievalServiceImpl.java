@@ -137,7 +137,8 @@ public class RetrievalServiceImpl implements RetrievalService {
         String answer = chatService.generateAnswer(prompt);
 
         // ===== Phase 4.5: Validate & Remap Citation Number =====
-        Pattern pattern = Pattern.compile("\\[(\\d+)\\]");
+        // Hỗ trợ cả [0] và [Nguồn 0] do AI đôi khi tự chèn thêm chữ "Nguồn"
+        Pattern pattern = Pattern.compile("\\[(?:Ngu[ồo]n\\s*)?(\\d+)\\]", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CHARACTER_CLASS);
         Matcher matcher = pattern.matcher(answer);
         
         // Pass 1: Thu thập tất cả các index hợp lệ
@@ -189,7 +190,19 @@ public class RetrievalServiceImpl implements RetrievalService {
             }
             
             String fileName = docIdToFileName.getOrDefault(r.chunk().getDocumentId(), "Tài liệu không xác định");
-            int estimatedPage = r.chunk().getPageNumber() != null ? r.chunk().getPageNumber() : (r.chunk().getChunkIndex() / 7) + 1;
+            // Ước tính trang dựa trên vị trí ký tự thực tế (chính xác hơn chunkIndex/7):
+            // - Mỗi chunk step thực tế = CHUNK_SIZE - OVERLAP = 500 - 200 = 300 ký tự
+            // - PDF tiếng Việt thông thường: ~2000 ký tự/trang
+            // => chunkIndex * 300 / 2000 + 1 (1-indexed)
+            int estimatedPage;
+            if (r.chunk().getPageNumber() != null) {
+                estimatedPage = r.chunk().getPageNumber();
+            } else {
+                final int CHUNK_STEP = 300;        // 500 chunk_size - 200 overlap
+                final int CHARS_PER_PAGE = 2000;   // ký tự trung bình mỗi trang PDF
+                int charOffset = r.chunk().getChunkIndex() * CHUNK_STEP;
+                estimatedPage = (charOffset / CHARS_PER_PAGE) + 1;
+            }
             sources.add(new SourceRefResponse(r.chunk().getDocumentId(), fileName, r.chunk().getId(), excerpt, estimatedPage));
         }
 
